@@ -80,13 +80,12 @@ public final class DDlogJooqProvider implements MockDataProvider {
     private static final String DDLOG_SOME = "ddlog_std::Some";
     private static final String DDLOG_NONE = "ddlog_std::None";
     private static final Object[] DEFAULT_BINDING = new Object[0];
+    private static final ParseLiterals PARSE_LITERALS = new ParseLiterals();
     private final DDlogAPI dDlogAPI;
     private final DSLContext dslContext;
     private final Field<Integer> updateCountField;
     private final Map<String, List<Field<?>>> tablesToFields = new HashMap<>();
     private final Map<String, List<? extends Field<?>>> tablesToPrimaryKeys = new HashMap<>();
-    private final ParseLiterals parseLiterals = new ParseLiterals();
-    private final TranslateCreateTableDialect translateCreateTableDialect = new TranslateCreateTableDialect();
     private final Map<String, Set<Record>> materializedViews = new ConcurrentHashMap<>();
 
     public DDlogJooqProvider(final DDlogAPI dDlogAPI, final List<String> sqlStatements) {
@@ -99,6 +98,7 @@ public final class DDlogJooqProvider implements MockDataProvider {
         // that we will use later (for example, the record types for views).
         final com.facebook.presto.sql.parser.SqlParser parser = new com.facebook.presto.sql.parser.SqlParser();
         final ParsingOptions options = ParsingOptions.builder().build();
+        final TranslateCreateTableDialect translateCreateTableDialect = new TranslateCreateTableDialect();
         for (final String sql : sqlStatements) {
             final Statement statement = parser.createStatement(sql, options);
             final String statementInH2Dialect = translateCreateTableDialect.process(statement, sql);
@@ -234,7 +234,7 @@ public final class DDlogJooqProvider implements MockDataProvider {
                     // need to parse literals into DDLogRecords
                     for (int i = 0; i < rowElements.length; i++) {
                         final boolean isNullableField = fields.get(i).getDataType().nullable();
-                        final DDlogRecord result = rowElements[i].accept(parseLiterals);
+                        final DDlogRecord result = rowElements[i].accept(PARSE_LITERALS);
                         recordsArray[i] = maybeOption(isNullableField, result);
                     }
                 }
@@ -337,7 +337,7 @@ public final class DDlogJooqProvider implements MockDataProvider {
             for (int i = 0; i < fields.size(); i++) {
                 if (fields.get(i).getUnqualifiedName().last().equalsIgnoreCase(identifier.getSimple())) {
                     final boolean isNullable = fields.get(i).getDataType().nullable();
-                    matchExpressions[i] = maybeOption(isNullable, literal.accept(parseLiterals));
+                    matchExpressions[i] = maybeOption(isNullable, literal.accept(PARSE_LITERALS));
                     return;
                 }
             }
@@ -360,29 +360,6 @@ public final class DDlogJooqProvider implements MockDataProvider {
             }
             throw new RuntimeException(String.format("Field %s being queried is not a primary key in table %s",
                     identifier, tableName));
-        }
-    }
-
-    /*
-     * Translates literals into corresponding DDlogRecord instances
-     */
-    private static class ParseLiterals extends SqlBasicVisitor<DDlogRecord> {
-
-        @Override
-        public DDlogRecord visit(final SqlLiteral sqlLiteral) {
-            switch (sqlLiteral.getTypeName()) {
-                case BOOLEAN:
-                    return new DDlogRecord(sqlLiteral.booleanValue());
-                case DECIMAL:
-                    return new DDlogRecord(sqlLiteral.intValue(false));
-                case CHAR:
-                    try {
-                        return new DDlogRecord(sqlLiteral.toValue());
-                    } catch (final DDlogException ignored) {
-                    }
-                default:
-                    throw new UnsupportedOperationException(sqlLiteral.toValue());
-            }
         }
     }
 
