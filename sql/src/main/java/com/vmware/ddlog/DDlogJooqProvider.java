@@ -138,6 +138,16 @@ public final class DDlogJooqProvider implements MockDataProvider {
         return mock;
     }
 
+    public Result<Record> fetchTable(final String tableName) {
+        final List<Field<?>> fields = tablesToFields.get(tableName.toUpperCase());
+        if (fields == null) {
+            throw new DDlogJooqProviderException(String.format("Unknown table %s queried", tableName));
+        }
+        final Result<Record> result = dslContext.newResult(fields);
+        result.addAll(materializedViews.computeIfAbsent(tableName.toUpperCase(), (k) -> new LinkedHashSet<>()));
+        return result;
+    }
+
     private void rollback() {
         try {
             dDlogAPI.transactionRollback();
@@ -200,13 +210,7 @@ public final class DDlogJooqProvider implements MockDataProvider {
                 return exception("Statement not supported: " + context.sql());
             }
             final String tableName = ((SqlIdentifier) select.getFrom()).getSimple();
-            final List<Field<?>> fields = tablesToFields.get(tableName.toUpperCase());
-            if (fields == null) {
-                return exception(String.format("Unknown table %s queried in statement: %s",
-                                                                    tableName, context.sql()));
-            }
-            final Result<Record> result = dslContext.newResult(fields);
-            result.addAll(materializedViews.computeIfAbsent(tableName.toUpperCase(), (k) -> new LinkedHashSet<>()));
+            final Result<Record> result = fetchTable(tableName);
             return new MockResult(1, result);
         }
 
