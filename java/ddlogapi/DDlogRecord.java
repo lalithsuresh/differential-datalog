@@ -126,6 +126,8 @@ public class DDlogRecord {
      */
     public static DDlogRecord convertObject(Object o)
             throws IllegalAccessException, DDlogException {
+        if (o == null)
+            return null;
         String name = o.getClass().getSimpleName();
         List<Field> fields = getAllFields(o.getClass());
         DDlogRecord[] fra = new DDlogRecord[fields.size()];
@@ -184,7 +186,7 @@ public class DDlogRecord {
     }
 
     public <T> T toTypedObject(Class<T> classOfT)
-            throws InstantiationException, IllegalAccessException, NoSuchMethodException, InvocationTargetException {
+            throws InstantiationException, IllegalAccessException, NoSuchMethodException, InvocationTargetException, DDlogException {
         Object instance = classOfT.getDeclaredConstructor().newInstance();
         long h = this.checkHandle();
 
@@ -243,7 +245,7 @@ public class DDlogRecord {
      * The class name and class fields must match the struct name and fields.
      */
     public Object toObject()
-            throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException, InvocationTargetException {
+            throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException, InvocationTargetException, DDlogException {
         if (!DDlogAPI.ddlog_is_struct(this.handle))
             throw new RuntimeException("This is not a struct");
 
@@ -271,6 +273,21 @@ public class DDlogRecord {
     public static DDlogRecord makeStruct(String name, DDlogRecord... fields) throws DDlogException {
         long[] handles = getHandlesAndInvalidate(fields);
         return fromHandle(DDlogAPI.ddlog_struct(checkNull(name), handles));
+    }
+
+    public static DDlogRecord makeNamedStruct(String name, String[] names, DDlogRecord... fields) throws DDlogException {
+        long[] handles = getHandlesAndInvalidate(fields);
+        return fromHandle(DDlogAPI.ddlog_named_struct(name, names, handles));
+    }
+
+    public boolean isNamedStruct() {
+        return DDlogAPI.ddlog_is_named_struct(this.checkHandle());
+    }
+
+    public String getFieldName(int index) throws DDlogException {
+        if (!this.isNamedStruct())
+            throw new DDlogException("Cannot get field name from a record which is not a named struct");
+        return DDlogAPI.ddlog_get_struct_field_name(this.checkHandle(), index);
     }
 
     /**
@@ -380,7 +397,7 @@ public class DDlogRecord {
         return DDlogAPI.ddlog_get_constructor(this.handle);
     }
 
-    public DDlogRecord getStructField(int index) {
+    public DDlogRecord getStructField(int index) throws DDlogException {
         if (!this.isStruct())
             throw new RuntimeException("Value is not a struct");
         return fromSharedHandle(DDlogAPI.ddlog_get_struct_field(this.handle, index));
@@ -498,7 +515,13 @@ public class DDlogRecord {
             builder.append(type).append("{");
 
             // Get the first field and check to see whether it is a struct with the same constructor
-            long f0 = DDlogAPI.ddlog_get_struct_field(h, 0);
+            long f0;
+            try {
+                f0 = DDlogAPI.ddlog_get_struct_field(h, 0);
+            } catch (DDlogException e) {
+                // Should never happen
+                throw new RuntimeException(e);
+            }
             if (f0 != 0) {
                 if (DDlogAPI.ddlog_is_struct(f0)) {
                     String f0type = DDlogAPI.ddlog_get_constructor(f0);
@@ -507,7 +530,13 @@ public class DDlogRecord {
                 }
 
                 for (int i = 0; ; i++) {
-                    long fh = DDlogAPI.ddlog_get_struct_field(h, i);
+                    long fh;
+                    try {
+                        fh = DDlogAPI.ddlog_get_struct_field(h, i);
+                    } catch (DDlogException e) {
+                        // Should never happen
+                        throw new RuntimeException(e);
+                    }
                     if (fh == 0)
                         break;
                     if (i > 0)
