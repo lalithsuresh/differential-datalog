@@ -1,6 +1,6 @@
 //! An untyped representation of DDlog values and database update commands.
 
-#![allow(unknown_lints)]
+#![allow(unknown_lints,clippy::needless_range_loop)]
 #![allow(improper_ctypes_definitions)]
 
 use num::{BigInt, BigUint, ToPrimitive};
@@ -725,10 +725,13 @@ pub unsafe extern "C" fn ddlog_named_struct(
     for index in 0..len {
         let name = match CStr::from_ptr(names[index]).to_str() {
             Ok(s) => s,
-            _     => { return null_mut(); }
+            _ => {
+                return null_mut();
+            }
         };
         let record = Box::from_raw(*fields.add(index));
-        tuples.push((Cow::from(name.to_owned()), *record))
+        let tuple = (Cow::from(name.to_owned()), *record);
+        tuples.push(tuple)
     }
     Box::into_raw(Box::new(Record::NamedStruct(
         Cow::from(constructor.to_owned()),
@@ -841,7 +844,7 @@ pub unsafe extern "C" fn ddlog_get_named_struct_field(
 ) -> *const Record {
     let name = match CStr::from_ptr(name).to_str() {
         Ok(s) => s,
-        _     => {
+        _ => {
             return null_mut();
         }
     };
@@ -862,16 +865,14 @@ pub unsafe extern "C" fn ddlog_get_named_struct_field_name(
     len: *mut libc::size_t,
 ) -> *const raw::c_char {
     match rec.as_ref() {
-        Some(Record::NamedStruct(_, fields)) => {
-            match fields.get(i) {
-                Some(field) => {
-                    *len = field.0.len();
-                    field.0.as_ref().as_ptr() as *const raw::c_char
-                }
-                _ => {
-                    *len = 0;
-                    null()
-                }
+        Some(Record::NamedStruct(_, fields)) => match fields.get(i) {
+            Some(field) => {
+                *len = field.0.len();
+                field.0.as_ref().as_ptr() as *const raw::c_char
+            }
+            _ => {
+                *len = 0;
+                null()
             }
         },
         _ => {
@@ -960,7 +961,7 @@ pub unsafe extern "C" fn ddlog_modify_cmd(
     Box::into_raw(Box::new(UpdCmd::Modify(
         RelIdentifier::RelId(table),
         *key,
-        *values
+        *values,
     )))
 }
 

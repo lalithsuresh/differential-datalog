@@ -825,13 +825,11 @@ JNIEXPORT jlong JNICALL Java_ddlogapi_DDlogAPI_ddlog_1named_1struct(
             free(fieldNames);
             throwDDlogException(env, "Field name cannot be null");
             return -1;
-            const char* name = (*env)->GetStringUTFChars(env, jname, NULL);
-            fieldNames[i] = name;
         }
+        const char* name = (*env)->GetStringUTFChars(env, jname, NULL);
+        fieldNames[i] = name;
     }
-    fprintf(stderr, "Calling ddlog_named_struct");
     ddlog_record* result = ddlog_named_struct(str, fieldNames, fields, len);
-    fprintf(stderr, "Returned from ddlog_named_struct");
     (*env)->ReleaseLongArrayElements(env, handles, a, 0);
     free(fields);
     for (size_t i = 0; i < len; i++) {
