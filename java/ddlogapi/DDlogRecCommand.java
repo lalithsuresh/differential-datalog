@@ -111,7 +111,7 @@ public class DDlogRecCommand implements DDlogCommand<DDlogRecord> {
     }
 
     public <T> T getValue(Class<T> classOfT)
-        throws InstantiationException, IllegalAccessException, NoSuchMethodException, InvocationTargetException {
+        throws InstantiationException, IllegalAccessException, NoSuchMethodException, InvocationTargetException, DDlogException {
         return (T) this._value.toTypedObject(classOfT);
     }
 
