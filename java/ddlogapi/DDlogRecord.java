@@ -403,6 +403,14 @@ public class DDlogRecord {
         return fromSharedHandle(DDlogAPI.ddlog_get_struct_field(this.handle, index));
     }
 
+    public DDlogRecord getStructFieldNoEx(int index) {
+        try {
+            return this.getStructField(index);
+        } catch (DDlogException ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
     /**
      * A DDlogRecord representing the value None{}, can be used as a value of the
      * standard library type Option.
