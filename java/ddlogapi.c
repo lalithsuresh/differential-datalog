@@ -792,6 +792,55 @@ JNIEXPORT jlong JNICALL Java_ddlogapi_DDlogAPI_ddlog_1struct(
     return (jlong)result;
 }
 
+JNIEXPORT jlong JNICALL Java_ddlogapi_DDlogAPI_ddlog_1named_1struct(
+    JNIEnv *env, jclass obj, jstring s, jobjectArray names, jlongArray handles) {
+    const char* str = (*env)->GetStringUTFChars(env, s, NULL);
+    jsize len = (*env)->GetArrayLength(env, handles);
+    jlong *a = (*env)->GetLongArrayElements(env, handles, NULL);
+    if (a == NULL)
+        return -1;
+    jsize nameLen = (*env)->GetArrayLength(env, names);
+    if (nameLen != len) {
+        throwDDlogException(env, "number of names does not match number of values");
+        return -1;
+    }
+    ddlog_record** fields = malloc(len * sizeof(ddlog_record*));
+    if (fields == NULL) {
+        throwOutOfMemException(env, "Could not allocate buffer for %d fields.", len);
+        return -1;
+    }
+    for (size_t i = 0; i < len; i++)
+        fields[i] = (ddlog_record*)a[i];
+
+    const char** fieldNames = malloc(len * sizeof(char*));
+    if (fieldNames == NULL) {
+        free(fields);
+        throwOutOfMemException(env, "Could not allocate buffer for %d names.", len);
+        return -1;
+    }
+    for (size_t i = 0; i < len; i++) {
+        jobject jname = (*env)->GetObjectArrayElement(env, names, i);
+        if (jname == NULL) {
+            free(fields);
+            free(fieldNames);
+            throwDDlogException(env, "Field name cannot be null");
+            return -1;
+        }
+        const char* name = (*env)->GetStringUTFChars(env, jname, NULL);
+        fieldNames[i] = name;
+    }
+    ddlog_record* result = ddlog_named_struct(str, fieldNames, fields, len);
+    (*env)->ReleaseLongArrayElements(env, handles, a, 0);
+    free(fields);
+    for (size_t i = 0; i < len; i++) {
+        jobject jname = (*env)->GetObjectArrayElement(env, names, i);
+        (*env)->ReleaseStringUTFChars(env, jname, fieldNames[i]);
+    }
+    free(fieldNames);
+    (*env)->ReleaseStringUTFChars(env, s, str);
+    return (jlong)result;
+}
+
 JNIEXPORT jboolean JNICALL Java_ddlogapi_DDlogAPI_ddlog_1is_1bool(
     JNIEnv *env, jclass obj, jlong handle) {
     return (jboolean)ddlog_is_bool((ddlog_record*)handle);
@@ -941,10 +990,22 @@ JNIEXPORT jboolean JNICALL Java_ddlogapi_DDlogAPI_ddlog_1is_1struct(
     return (jboolean)ddlog_is_struct((ddlog_record*)handle);
 }
 
+JNIEXPORT jboolean JNICALL Java_ddlogapi_DDlogAPI_ddlog_1is_named1_1struct(
+    JNIEnv *env, jclass obj, jlong handle) {
+    return (jboolean)ddlog_is_named_struct((ddlog_record*)handle);
+}
+
 JNIEXPORT jstring JNICALL Java_ddlogapi_DDlogAPI_ddlog_1get_1constructor(
     JNIEnv *env, jclass obj, jlong handle) {
     size_t size;
     const char *s = ddlog_get_constructor_with_length((const ddlog_record*)handle, &size);
+    return toJString(env, s, size);
+}
+
+JNIEXPORT jstring JNICALL Java_ddlogapi_DDlogAPI_ddlog_1get_1struct_1field_1name(
+    JNIEnv *env, jclass obj, jlong handle, jint index) {
+    size_t size;
+    const char *s = ddlog_get_named_struct_field_name((const ddlog_record*)handle, index, &size);
     return toJString(env, s, size);
 }
 
@@ -968,5 +1029,11 @@ JNIEXPORT jlong JNICALL Java_ddlogapi_DDlogAPI_ddlog_1delete_1val_1cmd(
 JNIEXPORT jlong JNICALL Java_ddlogapi_DDlogAPI_ddlog_1delete_1key_1cmd(
     JNIEnv *env, jclass obj, jint table, jlong handle) {
     ddlog_cmd* result = ddlog_delete_key_cmd(table, (ddlog_record*)handle);
+    return (jlong)result;
+}
+
+JNIEXPORT jlong JNICALL Java_ddlogapi_DDlogAPI_ddlog_1modify_1cmd(
+    JNIEnv *env, jclass obj, jint table, jlong keyHandle, jlong toModifyHandle) {
+    ddlog_cmd* result = ddlog_modify_cmd(table, (ddlog_record*)keyHandle, (ddlog_record*)toModifyHandle);
     return (jlong)result;
 }

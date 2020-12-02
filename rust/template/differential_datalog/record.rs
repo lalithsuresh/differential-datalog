@@ -1,6 +1,6 @@
 //! An untyped representation of DDlog values and database update commands.
 
-#![allow(unknown_lints)]
+#![allow(unknown_lints,clippy::needless_range_loop)]
 #![allow(improper_ctypes_definitions)]
 
 use num::{BigInt, BigUint, ToPrimitive};
@@ -708,6 +708,38 @@ pub unsafe extern "C" fn ddlog_struct(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn ddlog_named_struct(
+    constructor: *const raw::c_char,
+    field_names: *const *const raw::c_char,
+    fields: *const *mut Record,
+    len: libc::size_t,
+) -> *mut Record {
+    let constructor = match CStr::from_ptr(constructor).to_str() {
+        Ok(s) => s,
+        Err(_) => {
+            return null_mut();
+        }
+    };
+    let names: &[*const libc::c_char] = slice::from_raw_parts(field_names, len);
+    let mut tuples: Vec<(Name, Record)> = Vec::with_capacity(len as usize);
+    for index in 0..len {
+        let name = match CStr::from_ptr(names[index]).to_str() {
+            Ok(s) => s,
+            _ => {
+                return null_mut();
+            }
+        };
+        let record = Box::from_raw(*fields.add(index));
+        let tuple = (Cow::from(name.to_owned()), *record);
+        tuples.push(tuple)
+    }
+    Box::into_raw(Box::new(Record::NamedStruct(
+        Cow::from(constructor.to_owned()),
+        tuples,
+    )))
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn ddlog_struct_with_length(
     constructor: *const raw::c_char,
     constructor_len: libc::size_t,
@@ -780,6 +812,14 @@ pub unsafe extern "C" fn ddlog_is_struct(rec: *const Record) -> bool {
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn ddlog_is_named_struct(rec: *const Record) -> bool {
+    match rec.as_ref() {
+        Some(Record::NamedStruct(_, _)) => true,
+        _ => false,
+    }
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn ddlog_get_struct_field(
     rec: *const Record,
     idx: libc::size_t,
@@ -804,7 +844,7 @@ pub unsafe extern "C" fn ddlog_get_named_struct_field(
 ) -> *const Record {
     let name = match CStr::from_ptr(name).to_str() {
         Ok(s) => s,
-        Err(_) => {
+        _ => {
             return null_mut();
         }
     };
@@ -815,6 +855,30 @@ pub unsafe extern "C" fn ddlog_get_named_struct_field(
             .map(|(_, r)| r as *const Record)
             .unwrap_or(null_mut()),
         _ => null_mut(),
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn ddlog_get_named_struct_field_name(
+    rec: *const Record,
+    i: libc::size_t,
+    len: *mut libc::size_t,
+) -> *const raw::c_char {
+    match rec.as_ref() {
+        Some(Record::NamedStruct(_, fields)) => match fields.get(i) {
+            Some(field) => {
+                *len = field.0.len();
+                field.0.as_ref().as_ptr() as *const raw::c_char
+            }
+            _ => {
+                *len = 0;
+                null()
+            }
+        },
+        _ => {
+            *len = 0;
+            null()
+        }
     }
 }
 
@@ -883,6 +947,21 @@ pub unsafe extern "C" fn ddlog_delete_key_cmd(
     Box::into_raw(Box::new(UpdCmd::DeleteKey(
         RelIdentifier::RelId(table),
         *rec,
+    )))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn ddlog_modify_cmd(
+    table: libc::size_t,
+    key: *mut Record,
+    values: *mut Record,
+) -> *mut UpdCmd {
+    let key = Box::from_raw(key);
+    let values = Box::from_raw(values);
+    Box::into_raw(Box::new(UpdCmd::Modify(
+        RelIdentifier::RelId(table),
+        *key,
+        *values,
     )))
 }
 
